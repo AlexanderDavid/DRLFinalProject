@@ -29,6 +29,7 @@ class DepthCollisionAvoidance(MiniWorldEnv):
 
         self.num_agents = num_agents
         self.agents = {}
+        self.playback = []
 
         self.observations = {}
         self.depth_length = depth_length
@@ -167,6 +168,64 @@ class DepthCollisionAvoidance(MiniWorldEnv):
             if ent is not agent:
                 ent.render()
 
+    def render(self):
+        img = self.render_top_view(self.vis_fb)
+
+        img_width = img.shape[1]
+        img_height = img.shape[0]
+
+        if self.window is None:
+            config = pyglet.gl.Config(double_buffer=True)
+            self.window = pyglet.window.Window(
+                width=img_width,
+                height=img_height,
+                resizable=False,
+                config=config
+            )
+
+        self.window.clear()
+        self.window.switch_to()
+
+        # Bind the default frame buffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+        # Clear the color and depth buffers
+        glClearColor(0, 0, 0, 1.0)
+        glClearDepth(1.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+        # Setup orghogonal projection
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        glOrtho(0, img_width, 0, img_height, 0, 10)
+
+        # Draw the human render to the rendering window
+        img_flip = np.ascontiguousarray(np.flip(img, axis=0))
+        img_data = pyglet.image.ImageData(
+            img_width,
+            img_height,
+            'RGB',
+            img_flip.ctypes.data_as(POINTER(GLubyte)),
+            pitch=img_width * 3,
+        )
+        img_data.blit(
+            0,
+            0,
+            0,
+            width=img_width,
+            height=img_height
+        )
+
+        # Force execution of queued commands
+        glFlush()
+
+        self.window.flip()
+        self.window.dispatch_events()
+
+        return img
+
     def observation(self):
         observations = {}
 
@@ -204,8 +263,12 @@ class DepthCollisionAvoidance(MiniWorldEnv):
 
     def step(self, actions: Dict[int, Tuple[float, float]]):
         rewards = {}
-        info = {}
+        info = {"agents": {}}
         done = False
+
+        self.playback += [(id, self.agents[id].pos[0], self.agents[id].pos[2], self.step_count)
+                          for id in self.agents]
+
         for agent_id in actions:
             action = actions[agent_id]
             # Get the linear and rotational aspects of the action
@@ -235,7 +298,7 @@ class DepthCollisionAvoidance(MiniWorldEnv):
             # Calculate the reward as the energy efficiency of the last movement
             old_goal_dist = np.linalg.norm(agent.goal - old_pos)
             new_goal_dist = np.linalg.norm(agent.goal - agent.pos)
-            reward = (old_goal_dist - new_goal_dist) / np.linalg.norm(vel)
+            reward = float(old_goal_dist - new_goal_dist) / float(np.linalg.norm(vel))
 
             # Check for collisions and goal positions and rectify the reward
             for other_agent_id in self.agents:
@@ -244,14 +307,15 @@ class DepthCollisionAvoidance(MiniWorldEnv):
                     continue
 
                 if self.near(agent, other_agent, eps=0.05):
-                    reward = -15
+                    reward = -15.
                     done = True
                     info["agents"][agent_id] = "collision"
                     break
 
-                if new_goal_dist < 1:
-                    info["agents"][agent_id] = "goal"
-                    reward = 15
+            if new_goal_dist < 1:
+                info["agents"][agent_id] = "goal"
+                done = True
+                reward = 15.
 
             # Add the reward to the rewards
             rewards[agent_id] = reward

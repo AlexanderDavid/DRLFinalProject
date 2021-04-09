@@ -1,6 +1,7 @@
 import depth_collision_avoidance_env
 import gym
 import torch
+from statistics import mean
 from ppo import PPO, Memory
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -16,10 +17,15 @@ memory = Memory()
 obs = env.reset()
 done = False
 t = 0
-for episodes in range(500):
-    running_reward = 0
-    for i in range(100):
-        print(i)
+episodes = 500
+max_len = 100
+
+rewards = []
+lengths = []
+running_reward = 0
+
+for episode in range(episodes):
+    for i in range(max_len):
         t += 1
         depths = torch.stack([torch.Tensor(list(obs[agent_id][0])) for agent_id in obs]).view(-1, 1, 10, 64, 80)
         goals = torch.stack([torch.Tensor(list(obs[agent_id][1])) for agent_id in obs])
@@ -39,7 +45,15 @@ for episodes in range(500):
             memory.is_terminals.append(done)
 
         if t % 100 == 0:
+            print("---")
             ppo.update(memory)
+
+    rewards.append(running_reward)
+    running_reward = 0
+    lengths.append(i)
+
+    if episode % 50 == 49:
+        print(f"[{episode:03}/{episodes}\tAvg Reward: {mean(rewards[-50:])}\tAvg Lengths: {mean(lengths[:-50])}")
 
     print(running_reward)
     running_reward = 0

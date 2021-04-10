@@ -115,7 +115,7 @@ class ActorCritic(nn.Module):
 
 
 class PPO(nn.Module):
-    def __init__(self, width, height, action_std, lr=0.0003, gamma=0.99, K_epochs=80, eps_clip=0.2, device="cpu"):
+    def __init__(self, width, height, action_std, lr=0.0003, gamma=0.99, K_epochs=10, eps_clip=0.2, device="cpu"):
         super(PPO, self).__init__()
         self.lr = lr
         self.gamma = gamma
@@ -156,7 +156,7 @@ class PPO(nn.Module):
         old_logprobs = torch.squeeze(torch.stack(memory.logprobs)).to(self.device).detach().view(-1, 1)
 
         # Optimize policy for K epochs:
-        for _ in range(self.K_epochs):
+        for epoch in range(self.K_epochs):
             # Evaluating old actions and values :
             logprobs, state_values, dist_entropy = self.policy.evaluate(old_depths, old_goals, old_vels, old_actions)
 

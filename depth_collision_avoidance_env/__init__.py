@@ -259,9 +259,11 @@ class DepthCollisionAvoidance(MiniWorldEnv):
     def reset(self):
         super(DepthCollisionAvoidance, self).reset()
 
+        self.playback = []
+
         return self.observation()
 
-    def step(self, actions: Dict[int, Tuple[float, float]]):
+    def step(self, actions: Dict[int, Tuple[float, float]], collisions: bool=True):
         rewards = {}
         info = {"agents": {}}
         done = False
@@ -306,7 +308,7 @@ class DepthCollisionAvoidance(MiniWorldEnv):
                 if other_agent is agent:
                     continue
 
-                if self.near(agent, other_agent, eps=0.05):
+                if self.near(agent, other_agent, eps=0.05) and collisions:
                     reward = -15.
                     done = True
                     info["agents"][agent_id] = "collision"

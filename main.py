@@ -47,7 +47,7 @@ for episode in range(episodes):
             memory.rewards.append(r[reward])
             memory.is_terminals.append(done)
 
-        if t % 4 == 0:
+        if t % 4000 == 0:
             print("---")
             ppo.update(memory)
             memory.clear_memory()
@@ -56,11 +56,13 @@ for episode in range(episodes):
     running_reward = 0
     lengths.append(i)
 
+    print(f"Last episode reward: {rewards[-1]}")
+
     if episode % 50 == 49:
         print(f"[{episode:03}/{episodes}\tAvg Reward: {mean(rewards[-50:])}\tAvg Lengths: {mean(lengths[:-50])}")
+        torch.save(ppo.policy.state_dict(), "./PPO_checkpoint.pt")
         np.savetxt(f"./playbacks/{episode:03}.csv", env.playback)
 
-    print(running_reward)
     running_reward = 0
 
 

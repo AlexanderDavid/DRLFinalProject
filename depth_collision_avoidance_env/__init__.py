@@ -108,10 +108,6 @@ class DepthCollisionAvoidance(MiniWorldEnv):
         if frame_buffer == None:
             frame_buffer = self.obs_fb
 
-        # Switch to the default OpenGL context
-        # This is necessary on Linux Nvidia drivers
-        self.shadow_window.switch_to()
-
         # Bind the frame buffer before rendering into it
         frame_buffer.bind()
 
@@ -174,18 +170,6 @@ class DepthCollisionAvoidance(MiniWorldEnv):
         img_width = img.shape[1]
         img_height = img.shape[0]
 
-        if self.window is None:
-            config = pyglet.gl.Config(double_buffer=True)
-            self.window = pyglet.window.Window(
-                width=img_width,
-                height=img_height,
-                resizable=False,
-                config=config
-            )
-
-        self.window.clear()
-        self.window.switch_to()
-
         # Bind the default frame buffer
         glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
@@ -220,9 +204,6 @@ class DepthCollisionAvoidance(MiniWorldEnv):
 
         # Force execution of queued commands
         glFlush()
-
-        self.window.flip()
-        self.window.dispatch_events()
 
         return img
 
@@ -268,7 +249,8 @@ class DepthCollisionAvoidance(MiniWorldEnv):
         info = {"agents": {}}
         done = False
 
-        self.playback += [(id, self.agents[id].pos[0], self.agents[id].pos[2], self.step_count)
+        self.playback += [(id, self.agents[id].pos[0], self.agents[id].pos[2], self.agents[id].goal[0],
+                           self.agents[id].goal[2], self.step_count)
                           for id in self.agents]
 
         for agent_id in actions:

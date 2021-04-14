@@ -25,7 +25,9 @@ class ActorCritic(nn.Module):
 
         self.depth_conv = nn.Sequential(
             nn.Conv3d(1, 1, (1, 4, 4), (1, 2, 2), padding=(0, 1, 1)),
+            nn.BatchNorm3d(1),
             nn.Conv3d(1, 64, (10, 1, 1), (1, 1, 1), padding=(0, 0, 0)),
+            nn.BatchNorm3d(64),
             nn.MaxPool3d((1, 2, 2)),
             nn.Flatten()
         ).to(device)
@@ -86,7 +88,7 @@ class ActorCritic(nn.Module):
         # Return the zipped actions
         return zip(linears, rotations, logprobs)
 
-    def evaluate(self, depth, vel, goal, action):
+    def evaluate(self, depth, goal, vel, action):
         # Translate everything to tensors of the correct shape
         if type(depth) is not torch.Tensor:
             depth = torch.Tensor(list(depth)).view(-1, 1, 10, 64, 80)
@@ -96,6 +98,7 @@ class ActorCritic(nn.Module):
             vel = torch.Tensor(vel).view(-1, 2)
 
         # Convolve the depth image stack and concat with the goal and last velocity
+        torch.save(depth, "last_depth.pt")
         conv = self.depth_conv(depth)
         catted = torch.cat((conv, goal, vel), dim=1)
 
@@ -104,7 +107,6 @@ class ActorCritic(nn.Module):
 
         action_var = self.action_var.expand_as(action_means)
         cov_mat = torch.diag_embed(action_var).to(self.device)
-
         dist = MultivariateNormal(action_means, cov_mat)
 
         action_logprobs = dist.log_prob(action)
@@ -115,7 +117,7 @@ class ActorCritic(nn.Module):
 
 
 class PPO(nn.Module):
-    def __init__(self, width, height, action_std, lr=0.0003, gamma=0.99, K_epochs=10, eps_clip=0.2, device="cpu"):
+    def __init__(self, width, height, action_std, lr=0.003, gamma=0.99, K_epochs=10, eps_clip=0.2, device="cpu"):
         super(PPO, self).__init__()
         self.lr = lr
         self.gamma = gamma
@@ -156,6 +158,7 @@ class PPO(nn.Module):
         old_logprobs = torch.squeeze(torch.stack(memory.logprobs)).to(self.device).detach().view(-1, 1)
 
         # Optimize policy for K epochs:
+        losses = []
         for epoch in range(self.K_epochs):
             # Evaluating old actions and values :
             logprobs, state_values, dist_entropy = self.policy.evaluate(old_depths, old_goals, old_vels, old_actions)
@@ -168,6 +171,7 @@ class PPO(nn.Module):
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
             loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, rewards) - 0.01 * dist_entropy
+            losses.append(loss.mean().item() / self.K_epochs)
 
             # take gradient step
             self.optimizer.zero_grad()
@@ -176,3 +180,5 @@ class PPO(nn.Module):
 
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
+
+        return sum(losses)

@@ -35,13 +35,18 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self.depth_conv_action = nn.Sequential(
-            nn.Conv2d(10, 64, 8, 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 64, 4, 2),
-            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv2d(1, 32, 8, 4),
             nn.Flatten(),
-            nn.Linear(3072, 1024),
-            nn.ReLU()
+            nn.Linear(5120, 9120),
+            # nn.LeakyReLU(0.2, inplace=True),
+            nn.Tanh(),
+            # nn.Conv2d(64, 64, 4, 2),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Tanh(),
+            nn.Flatten(),
+            nn.Linear(9120, 1024),
+            # nn.ReLU()
+            nn.Tanh()
         ).to(device)
         self.depth_conv_action.apply(ActorCritic.__init_weights)
 
@@ -54,13 +59,18 @@ class ActorCritic(nn.Module):
         ).to(device)
 
         self.depth_conv_state = nn.Sequential(
-            nn.Conv2d(10, 64, 8, 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 64, 4, 2),
-            nn.LeakyReLU(0.2, inplace=True),
+            # nn.Conv2d(1, 32, 8, 4),
+            # nn.LeakyReLU(0.2, inplace=True),
             nn.Flatten(),
-            nn.Linear(3072, 1024),
-            nn.ReLU()
+            nn.Linear(5120, 9120),
+            nn.Tanh(),
+            # nn.Conv2d(64, 64, 4, 2),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Tanh(),
+            nn.Flatten(),
+            nn.Linear(9120, 1024),
+            # nn.ReLU()
+            nn.Tanh()
         ).to(device)
         self.depth_conv_state.apply(ActorCritic.__init_weights)
 
@@ -188,12 +198,18 @@ class PPO(nn.Module):
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
 
         # convert list to tensor
-        old_depths = torch.squeeze(torch.stack([state[0] for state in memory.states]).to(self.device), 1).detach().view(-1, 10, 64, 80)
+        old_depths = torch.squeeze(torch.stack([state[0] for state in memory.states]).to(self.device), 1).detach().view(-1, 1, 64, 80)
         print("Depths contain NaN?", old_depths.isnan().sum() > 0)
         old_goals = torch.squeeze(torch.stack([state[1] for state in memory.states]).to(self.device), 1).detach().view(-1, 2)
         old_vels = torch.squeeze(torch.stack([state[2] for state in memory.states]).to(self.device), 1).detach().view(-1, 2)
         old_actions = torch.squeeze(torch.stack(memory.actions).to(self.device), 1).detach().view(-1, 2)
         old_logprobs = torch.squeeze(torch.stack(memory.logprobs)).to(self.device).detach().view(-1, 1)
+
+        torch.save(old_depths, "old_depths.pt")
+        torch.save(self.policy, "policy.pt")
+        torch.save(old_goals, "old_goals.pt")
+        torch.save(old_vels, "old_vels.pt")
+        torch.save(old_logprobs, "old_logprobs.pt")
 
         # Optimize policy for K epochs:
         losses = []
@@ -218,8 +234,8 @@ class PPO(nn.Module):
             nn.utils.clip_grad_norm_(self.policy.parameters(), 0.01)
             self.optimizer.step()
             print(epoch, " -- ")
-            print("Action Conv isNan? ", ppo.policy.depth_conv_action[0].weight.isnan().sum() > 1)
-            print("State Conv isNan? ", ppo.policy.depth_conv_state[0].weight.isnan().sum() > 1)
+            # print("Action Conv isNan? ", ppo.policy.depth_conv_action[0].weight.isnan().sum() > 1)
+            # print("State Conv isNan? ", ppo.policy.depth_conv_state[0].weight.isnan().sum() > 1)
 
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -268,7 +284,7 @@ for episode in range(episodes):
     for i in range(max_len):
         t += 1
         # Convert observations to batches of tensors
-        depths = torch.stack([torch.Tensor(list(obs[agent_id][0])) for agent_id in obs]).view(-1, 10, 64, 80)
+        depths = torch.stack([torch.Tensor(list(obs[agent_id][0][-1])) for agent_id in obs]).view(-1, 1, 64, 80)
         goals = torch.stack([torch.Tensor(list(obs[agent_id][1])) for agent_id in obs])
         vels = torch.stack([torch.Tensor(list(obs[agent_id][2])) for agent_id in obs])
         depths /= 4.5
@@ -282,12 +298,12 @@ for episode in range(episodes):
 
         for action, depth, goal, vel, reward in zip(actions, depths, goals, vels, r):
             memory.actions.append(torch.Tensor(action[:2]))
-            memory.states.append((depth.view(10, 64, 80), goal, vel))
+            memory.states.append((depth.view(1, 64, 80), goal, vel))
             memory.logprobs.append(action[2])
             memory.rewards.append(r[reward])
             memory.is_terminals.append(done)
 
-        if len(memory.rewards) % 400 == 0:
+        if len(memory.rewards) % 100 == 0:
             # For some reason the Conv layer is producing NaN sometimes which will cause
             # training to fail. Until this is solved just skip that training step if this
             # happens
@@ -309,7 +325,7 @@ for episode in range(episodes):
     if episode % 50 == 49:
         print(f"[{episode:03}/{episodes}\tAvg Reward: {mean([r[1] for r in rewards[-50:]])}\tAvg Lengths: {mean([l[1] for l in lengths[-50:]])}")
         torch.save(ppo.policy.state_dict(), "./PPO_checkpoint.pt")
-        np.savetxt(f"./playbacks/{episode:03}.csv", env.playback, delim=",")
+        np.savetxt(f"./playbacks/{episode:03}.csv", env.playback, delimiter=",")
         pickle.dump((rewards, lengths, losses), open("./results_checkpoint.pickle", "wb+"))
 
     running_reward = 0
@@ -321,7 +337,7 @@ pickle.dump((rewards, lengths, losses), open("./results.pickle", "wb+"))
 # In[58]:
 
 
-ppo.policy.depth_conv_action[0].weight.isnan().sum()
+# ppo.policy.depth_conv_action[0].weight.isnan().sum()
 
 
 # In[ ]:

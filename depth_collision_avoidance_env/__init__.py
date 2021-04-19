@@ -19,7 +19,7 @@ class DepthCollisionAvoidance(MiniWorldEnv):
     placed randomly in one big room.
     """
 
-    def __init__(self, size=10, max_episode_steps=180, num_agents=4, pref_speed=1.3, max_speed=1.5, delta_time=0.10,
+    def __init__(self, size=10, max_episode_steps=100000, num_agents=4, pref_speed=1.3, max_speed=1.5, delta_time=0.10,
                  depth_length=10, **kwargs):
         assert size >= 2
         self.size = size
@@ -73,24 +73,28 @@ class DepthCollisionAvoidance(MiniWorldEnv):
 
         self.agents = {}
         self.observations = {}
+        starts = [(1, self.size / 2), (self.size / 2, self.size - 1), (self.size - 1, self.size / 2), (self.size / 2, 1)]
+        goals = [(self.size - 1, self.size / 2), (self.size / 2, 1), (1, self.size / 2), (self.size / 2, self.size - 1)]
+        dirs = [0, -np.pi / 2, -np.pi, np.pi/2]
         # Add all agents to the world
-        for i in range(self.num_agents):
+        for i, start, goal, direction in zip(range(self.num_agents), starts, goals, dirs):
             # Initialize the agent
             agent = Agent()
 
             # Randomize the goal position of the agent
-            agent.goal = np.array([np.random.rand() * self.size,
+            agent.goal = np.array([goal[0],
                                    0,
-                                   np.random.rand() * self.size])
+                                   goal[1]])
 
             # Place the agent down in the environment
             self.place_entity(
                 agent,
                 room=room,
-                min_x=0,
-                max_x=self.size,
-                min_z=0,
-                max_z=self.size
+                dir=direction,
+                min_x=start[0],
+                max_x=start[0],
+                min_z=start[1],
+                max_z=start[1],
             )
 
             # Append it to the list
@@ -250,7 +254,8 @@ class DepthCollisionAvoidance(MiniWorldEnv):
         done = False
 
         self.playback += [(id, self.agents[id].pos[0], self.agents[id].pos[2], self.agents[id].goal[0],
-                           self.agents[id].goal[2], self.step_count)
+                           self.agents[id].goal[2], self.agents[id].vel[0], self.agents[id].vel[2],
+                           self.agents[id].dir, self.step_count)
                           for id in self.agents]
 
         for agent_id in actions:
@@ -258,6 +263,7 @@ class DepthCollisionAvoidance(MiniWorldEnv):
             # Get the linear and rotational aspects of the action
             linear = action[0]
             rot = action[1]
+            print(linear, rot)
 
             agent = self.agents[agent_id]
 
@@ -282,7 +288,9 @@ class DepthCollisionAvoidance(MiniWorldEnv):
             # Calculate the reward as the energy efficiency of the last movement
             old_goal_dist = np.linalg.norm(agent.goal - old_pos)
             new_goal_dist = np.linalg.norm(agent.goal - agent.pos)
-            reward = float(old_goal_dist - new_goal_dist) / float(np.linalg.norm(vel))
+            reward = old_goal_dist - new_goal_dist
+            # Calculate the base reward as the rotational penelty reward
+            reward -= abs(rot)
 
             # Check for collisions and goal positions and rectify the reward
             for other_agent_id in self.agents:

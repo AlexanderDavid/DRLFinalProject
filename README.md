@@ -6,4 +6,6 @@ This repository holds the code for my final project for my DRL and Computer Visi
 Once all dependencies and gym_miniworld is installed run `python train.py` to begin training the agent. A lot of debugging information will print out as well as the rewards every 5 epochs.
 
 # Visualization
-You can visualize any trajectory using the `Visualizer.py` file and passing in a csv playback file as the first argument. You can also view plots and the last trajectory as an image in the `Results.ipynb` file.
+You can visualize any trajectory using the `Visualizer.py` file and passing in a csv playback file as the first argument. You can also view plots and the last trajectory as an image in the `Results.ipynb` file. Below is a visualization of a trajectory that /almost/ got it right.
+
+![](almost.gif)

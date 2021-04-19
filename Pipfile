@@ -10,6 +10,9 @@ pyglet = "*"
 cython = "*"
 matplotlib = "*"
 torch = "*"
+torchvision = "*"
+jupyter = "*"
+seaborn = "*"
 
 [dev-packages]
 

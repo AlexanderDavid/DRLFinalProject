@@ -1,5 +1,6 @@
-# TeX in Emacs
+# TeX
 .auctex-auto/
+.build/
 
 # Pycharm
 .idea/

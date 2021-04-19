@@ -1,6 +1,3 @@
-[submodule "ORCA"]
-	path = ORCA
-	url = git@github.com:sybrenstuvel/Python-RVO2.git
 [submodule "gym-miniworld"]
 	path = gym-miniworld
 	url = git@github.com:AlexanderDavid/gym-miniworld.git
